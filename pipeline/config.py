@@ -123,7 +123,8 @@ CATEGORY_BASELINE = {
 }
 
 EDITORIAL_BOOST_FILE = "editorial_boost.json"
-# Lives inside site/ (not a separate top-level data/ folder) so a single
-# static file server root serves both the app and its data — required for
-# GitHub Pages, and for local testing to work without path traversal.
-OUTPUT_FILE = "../site/data/venues.json"
+# Lives inside docs/ (not a separate top-level data/ folder) so a single
+# static file server root serves both the app and its data. docs/ specifically
+# (not site/) because GitHub Pages without a custom Actions workflow can only
+# serve from the repo root or a /docs folder.
+OUTPUT_FILE = "../docs/data/venues.json"
