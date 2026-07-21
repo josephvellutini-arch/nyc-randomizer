@@ -1,10 +1,13 @@
 # NYC Randomizer
+Hi my name is Joey and I have been living in Brooklyn for the past 3 years. I love NYC but I don't make enough of my time here. With such a beautiful and diverse city, I often find myself with choice overload and end up only exploring the places I know. 
+
+Here is my solution: The NYC Randomizer
 
 Pick a borough (or all of NYC), pick categories, and get a randomized itinerary of
 restaurants, cafes, parks, landmarks, museums, public art, and markets — ranked by
 a proprietary quality score built from open data.
 
-Ratings are **not** scraped or blended from Yelp/Google/TripAdvisor/Apple — every
+Ratings are **not** scraped or blended from Yelp/Google/TripAdvisor/Apple — sadly, every
 major review provider's API terms forbid combining their rating data with other
 sources or caching it long-term. Instead, venue data and scoring come from:
 
