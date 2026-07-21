@@ -1,5 +1,5 @@
 # NYC Randomizer
-Hi my name is Joey and I have been living in Brooklyn for the past 3 years. I love NYC but I don't make enough of my time here. With such a beautiful and diverse city, I often find myself with choice overload and end up only exploring the places I know. 
+Hi my name is Joey and I have been living in NYC since 2024. I love NYC but I don't make enough of my time here. With such a beautiful and diverse city, I often find myself with choice overload and end up only exploring the places I know. 
 
 Here is my solution: The NYC Randomizer
 
