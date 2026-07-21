@@ -165,6 +165,37 @@ button#generate:hover {
   font-size: 0.9rem;
 }
 
+.score-details {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.score-details summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.score-details ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.review-links {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.review-links a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.review-links a:hover {
+  text-decoration: underline;
+}
+
 footer {
   max-width: 900px;
   margin: 0 auto;

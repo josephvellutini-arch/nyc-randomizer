@@ -22,6 +22,9 @@ def main():
 
     print(f"\nScoring {len(venues)} venues...")
     venues = score_venues(venues)
+    # Review-site links are built client-side (see docs/app.js) from
+    # name/address instead of stored per-venue — storing 4 full URLs for
+    # every one of ~40k venues nearly tripled the JSON file for no reason.
 
     out_path = os.path.join(os.path.dirname(__file__), OUTPUT_FILE)
     with open(out_path, "w", encoding="utf-8") as f:
