@@ -128,3 +128,9 @@ EDITORIAL_BOOST_FILE = "editorial_boost.json"
 # (not site/) because GitHub Pages without a custom Actions workflow can only
 # serve from the repo root or a /docs folder.
 OUTPUT_FILE = "../docs/data/venues.json"
+
+# 2020 Neighborhood Tabulation Areas (NTAs) — used for the map view's
+# neighborhood boundaries, not part of the regular venue fetch/score cycle
+# since neighborhood shapes don't change. See pipeline/fetch_neighborhoods.py.
+NEIGHBORHOODS_DATASET_ID = "9nt8-h7nd"
+NEIGHBORHOODS_OUTPUT_FILE = "../docs/data/neighborhoods.json"
