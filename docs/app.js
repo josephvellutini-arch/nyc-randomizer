@@ -25,6 +25,23 @@ const YELP_LOCATION = {
   StatenIsland: "Staten Island, NY",
 };
 
+// Live per-provider ratings (Cloudflare Worker proxy, keeps API keys
+// server-side — see worker/README.md). Only fetched for categories where
+// Yelp/Google actually have reliable business listings; parks/landmarks/etc.
+// tend to fuzzy-match to unrelated nearby businesses, which would be
+// misleading rather than useful.
+const LIVE_RATINGS_URL = "https://nyc-randomizer-ratings.josephvellutini.workers.dev/";
+// Not a real secret -- shipped in public JS, so anyone can read it. It only
+// raises the bar against casual scanning; the Worker's own per-IP rate
+// limit (via KV) is the actual protection against abuse/cost exposure.
+const APP_TOKEN = "Y2DPXEyXYNeoDUzIBDLOFNtGTMPdxZl";
+const LIVE_RATINGS_CATEGORIES = new Set(["restaurant", "cafe", "market"]);
+// Total cap on live fetches per generated itinerary (not per-category) —
+// "Full Randomize" mode can return the entire filtered set (thousands of
+// venues), so capping how many ever trigger a live fetch keeps this from
+// blowing through Yelp/Google rate limits or your Google billing.
+const MAX_LIVE_FETCHES = 10;
+
 // Plain search-query deep links (no scraping, no data copied) — built here
 // instead of stored per-venue in venues.json to avoid nearly tripling that
 // file's size with mostly-boilerplate URL strings.
@@ -118,7 +135,10 @@ function generateItinerary() {
   }
 
   statusEl.textContent = `${itinerary.length} stop${itinerary.length === 1 ? "" : "s"} (from ${filtered.length} matching venues).`;
-  renderItinerary(itinerary);
+  // Live ratings only in Top-N mode. Full Randomize can return the entire
+  // filtered set (thousands of venues) — never firing live fetches there
+  // avoids blowing through Yelp/Google rate limits or Google billing.
+  renderItinerary(itinerary, mode === "topn");
 }
 
 const REVIEW_LINK_LABELS = {
@@ -155,11 +175,79 @@ function renderReviewLinks(links) {
   return `<p class="review-links">Check reviews: ${items}</p>`;
 }
 
-function renderItinerary(venues) {
+function starString(rating) {
+  const full = Math.round(rating);
+  return "★".repeat(full) + "☆".repeat(Math.max(0, 5 - full));
+}
+
+function renderProviderRows(container, results) {
+  const rows = results.filter(Boolean);
+  if (rows.length === 0) {
+    container.innerHTML = `<p class="live-caveat">No live ratings found for this venue.</p>`;
+    return;
+  }
+  container.innerHTML = rows
+    .map(
+      (r) => `
+      <div class="provider-row">
+        <span class="provider-name">${escapeHtml(r.provider)}</span>
+        <span class="provider-stars">${starString(r.rating)} ${r.rating.toFixed(1)}</span>
+        <span class="provider-count">(${r.review_count.toLocaleString()})</span>
+        <a href="${escapeAttr(r.url)}" target="_blank" rel="noopener">view</a>
+      </div>`
+    )
+    .join("");
+}
+
+async function fetchLiveRatings(venue) {
+  const params = new URLSearchParams({
+    name: venue.name,
+    address: venue.address || "",
+    borough: venue.borough,
+  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const resp = await fetch(`${LIVE_RATINGS_URL}?${params}`, {
+      signal: controller.signal,
+      headers: { "X-App-Token": APP_TOKEN },
+    });
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return [
+      data.yelp && { provider: "Yelp", ...data.yelp },
+      data.google && { provider: "Google", ...data.google },
+    ];
+  } catch (err) {
+    console.error("Live ratings fetch failed for", venue.name, err);
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function renderItinerary(venues, fetchLive) {
   resultsEl.innerHTML = "";
+  let liveFetchCount = 0;
+
   venues.forEach((v, i) => {
     const card = document.createElement("article");
     card.className = "venue-card";
+
+    const eligibleForLive =
+      fetchLive && LIVE_RATINGS_CATEGORIES.has(v.category) && liveFetchCount < MAX_LIVE_FETCHES;
+
+    const liveSectionHtml = eligibleForLive
+      ? `
+        <div class="live-section" data-live-rows>
+          <div class="live-heading"><span class="live-dot pulsing"></span> Live ratings</div>
+          <div class="provider-rows">
+            <div class="skeleton-row" style="width:70%"></div>
+            <div class="skeleton-row" style="width:55%"></div>
+          </div>
+        </div>`
+      : "";
+
     card.innerHTML = `
       <div class="venue-index">${i + 1}</div>
       <div class="venue-body">
@@ -172,9 +260,20 @@ function renderItinerary(venues) {
         ${v.address ? `<p class="venue-address">${escapeHtml(v.address)}</p>` : ""}
         ${renderBreakdown(v.score_breakdown)}
         ${renderReviewLinks(buildReviewLinks(v))}
+        ${liveSectionHtml}
       </div>
     `;
     resultsEl.appendChild(card);
+
+    if (eligibleForLive) {
+      liveFetchCount++;
+      const dot = card.querySelector(".live-dot");
+      const rows = card.querySelector(".provider-rows");
+      fetchLiveRatings(v).then((results) => {
+        renderProviderRows(rows, results);
+        dot.classList.remove("pulsing");
+      });
+    }
   });
 }
 

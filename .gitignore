@@ -3,3 +3,8 @@ __pycache__/
 .venv/
 venv/
 .claude/
+.env
+.env.*
+secrets.local.json
+.wrangler/
+node_modules/

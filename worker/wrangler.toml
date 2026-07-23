@@ -1,0 +1,7 @@
+name = "nyc-randomizer-ratings"
+main = "ratings-proxy.js"
+compatibility_date = "2026-07-22"
+
+[[kv_namespaces]]
+binding = "RATINGS_RATE_LIMIT"
+id = "dc4b725998814719a4019b3df8e8ef37"
