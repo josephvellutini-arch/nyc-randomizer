@@ -36,11 +36,14 @@ const LIVE_RATINGS_URL = "https://nyc-randomizer-ratings.josephvellutini.workers
 // limit (via KV) is the actual protection against abuse/cost exposure.
 const APP_TOKEN = "Y2DPXEyXYNeoDUzIBDLOFNtGTMPdxZl";
 const LIVE_RATINGS_CATEGORIES = new Set(["restaurant", "cafe", "market"]);
-// Total cap on live fetches per generated itinerary (not per-category) —
-// "Full Randomize" mode can return the entire filtered set (thousands of
-// venues), so capping how many ever trigger a live fetch keeps this from
-// blowing through Yelp/Google rate limits or your Google billing.
-const MAX_LIVE_FETCHES = 10;
+// Cap on live fetches PER eligible category (not a shared total) — e.g. up
+// to 5 restaurants + up to 5 cafes + up to 5 markets, so the cap scales
+// with however many live-rated categories are actually in the itinerary
+// instead of one category crowding out the others. Live fetching is also
+// restricted to Top-N mode entirely (see generateItinerary) — Full
+// Randomize can return the entire filtered set (thousands of venues), and
+// no per-category cap alone would be safe against that.
+const MAX_LIVE_FETCHES_PER_CATEGORY = 5;
 
 // Plain search-query deep links (no scraping, no data copied) — built here
 // instead of stored per-venue in venues.json to avoid nearly tripling that
@@ -228,14 +231,17 @@ async function fetchLiveRatings(venue) {
 
 function renderItinerary(venues, fetchLive) {
   resultsEl.innerHTML = "";
-  let liveFetchCount = 0;
+  const liveFetchCountByCategory = new Map();
 
   venues.forEach((v, i) => {
     const card = document.createElement("article");
     card.className = "venue-card";
 
+    const categoryCount = liveFetchCountByCategory.get(v.category) || 0;
     const eligibleForLive =
-      fetchLive && LIVE_RATINGS_CATEGORIES.has(v.category) && liveFetchCount < MAX_LIVE_FETCHES;
+      fetchLive &&
+      LIVE_RATINGS_CATEGORIES.has(v.category) &&
+      categoryCount < MAX_LIVE_FETCHES_PER_CATEGORY;
 
     const liveSectionHtml = eligibleForLive
       ? `
@@ -266,7 +272,7 @@ function renderItinerary(venues, fetchLive) {
     resultsEl.appendChild(card);
 
     if (eligibleForLive) {
-      liveFetchCount++;
+      liveFetchCountByCategory.set(v.category, categoryCount + 1);
       const dot = card.querySelector(".live-dot");
       const rows = card.querySelector(".provider-rows");
       fetchLiveRatings(v).then((results) => {
