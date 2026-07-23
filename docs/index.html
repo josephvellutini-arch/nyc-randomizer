@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>NYC Randomizer</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -53,7 +55,26 @@
       <p id="status" role="status"></p>
     </section>
 
-    <section id="results"></section>
+    <section id="results-panel">
+      <div id="results-column">
+        <div id="confirm-bar" hidden>
+          <span id="confirm-count"></span>
+          <button id="build-route" type="button">Build My Route</button>
+        </div>
+        <div id="results-list"></div>
+        <div id="final-itinerary" hidden>
+          <div class="final-itinerary-header">
+            <button id="back-to-browsing" type="button">&larr; Back to browsing</button>
+            <label class="start-time-label">
+              Start time
+              <input type="time" id="start-time" value="10:00" />
+            </label>
+          </div>
+          <ol id="route-steps"></ol>
+        </div>
+      </div>
+      <div id="map"></div>
+    </section>
   </main>
 
   <footer>
@@ -64,6 +85,8 @@
     </p>
   </footer>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="app.js"></script>
 </body>
 </html>

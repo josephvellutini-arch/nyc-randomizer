@@ -1,51 +1,71 @@
 # Ratings proxy (Cloudflare Worker)
 
-Keeps the Yelp/Google API keys off the client. The static site calls this
-Worker per venue shown in a generated itinerary; it calls Yelp + Google
-server-side and returns just the numbers.
+Keeps the Google Places API key off the client. The static site calls this
+Worker per venue shown in a generated itinerary; it calls Google server-side
+and returns just the number. (Originally showed Yelp + Google separately;
+simplified to Google-only — see the comment at the top of `ratings-proxy.js`.)
 
 ## Deploy
 
-1. https://dash.cloudflare.com → **Workers & Pages** → **Create** → **Create Worker**
-2. Name it (e.g. `nyc-randomizer-ratings`), deploy the placeholder, then **Edit code**
-3. Delete the placeholder and paste in the entire contents of `ratings-proxy.js`
-4. **Save and deploy**
-5. Go to the Worker's **Settings → Variables and Secrets**, add three, all as **Secret** (encrypted) type:
-   - `YELP_API_KEY`
-   - `GOOGLE_PLACES_API_KEY`
-   - `ALLOWED_ORIGIN` — set to `https://josephvellutini-arch.github.io`
-6. Note the Worker's URL, shown at the top of its dashboard page — looks like
-   `https://nyc-randomizer-ratings.<your-subdomain>.workers.dev`
+Uses Wrangler (Cloudflare's CLI), not the dashboard's code editor — the
+dashboard's "Quick Edit" flow silently failed to deploy pasted changes
+multiple times during development with no clear error.
+
+```
+npm install -g wrangler
+wrangler login          # one-time interactive browser auth
+cd worker
+wrangler deploy
+```
+
+One-time setup for a fresh environment (already done for the current
+deployment):
+
+```
+wrangler kv namespace create RATINGS_RATE_LIMIT   # then add the printed
+                                                    # binding to wrangler.toml
+
+wrangler secret put GOOGLE_PLACES_API_KEY
+wrangler secret put ALLOWED_ORIGIN                 # e.g. https://josephvellutini-arch.github.io
+wrangler secret put APP_TOKEN                       # any random string; must match APP_TOKEN in docs/app.js
+```
+
+If `wrangler secret put` ever appears to silently not take effect after a
+redeploy, check for response caching before assuming the secret is wrong —
+see the note in `ratings-proxy.js` about `Cache-Control: no-store`; an
+earlier debugging session lost significant time to Cloudflare's edge
+caching an old response rather than an actual secret/encoding bug.
 
 ## Request format
 
 ```
-GET /?name=LOOSIE%27S&address=145%20BOWERY&borough=Manhattan
+GET /?name=LOOSIE%27S&address=145%20BOWERY
+Header: X-App-Token: <matches the Worker's APP_TOKEN secret>
 ```
 
 Response:
 
 ```json
 {
-  "yelp": { "rating": 4.5, "review_count": 393, "url": "https://www.yelp.com/biz/..." },
   "google": { "rating": 4.6, "review_count": 812, "url": "https://maps.google.com/?..." }
 }
 ```
 
-Either field is `null` if that provider has no match or the call failed —
-the frontend should handle a missing provider gracefully (just show what's
-available).
+`google` is `null` if there's no match or the call failed — the frontend
+handles a missing result gracefully (just shows nothing for that venue).
 
-## Current abuse protection (honest limits)
+## Abuse protection
 
-- CORS restricted to `ALLOWED_ORIGIN`, so browser JS on other sites can't
-  read responses from this Worker.
-- This does **not** stop someone from calling the Worker URL directly
-  (curl, Postman, etc.) — CORS only constrains browsers. For this project's
-  scale (personal, low traffic), the real financial safety net is the
-  Google Cloud **budget alert** set up alongside the API key, not this
-  Worker's own defenses.
-- If this ever needs tightening: add a per-IP rate limit inside the Worker,
-  or a shared request token that `app.js` sends and the Worker checks
-  (raises the bar, doesn't make it airtight — a client-side secret is
-  never fully hideable).
+- **`X-App-Token` header check**: the Worker rejects requests missing the
+  correct token with 401. Not a real secret (it's in public JS, so anyone
+  can read it) — just raises the bar against casual scanning of the Worker's
+  URL by things that never load the actual page.
+- **Per-IP rate limiting via KV** (`RATINGS_RATE_LIMIT` binding, 30
+  requests/60s per `CF-Connecting-IP`): the actual protection against
+  sustained abuse/cost exposure, independent of whether the token leaks.
+- **CORS** restricted to `ALLOWED_ORIGIN`.
+- The Google API key itself cannot be usefully IP-restricted — Cloudflare
+  Workers egress from a large, dynamic, shared IP pool, so an IP allowlist
+  would restrict essentially nothing. Real defenses on the Google side are
+  the key's API-scope restriction (Places API only) and a Google Cloud
+  budget alert.

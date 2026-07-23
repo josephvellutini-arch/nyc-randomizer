@@ -1,16 +1,19 @@
 /**
  * NYC Randomizer — live ratings proxy (Cloudflare Worker).
  *
- * Keeps the Yelp/Google API keys server-side. The static site (docs/app.js)
+ * Keeps the Google Places API key server-side. The static site (docs/app.js)
  * calls this Worker per venue shown in a generated itinerary; this Worker
- * calls Yelp + Google on its behalf and returns just the numbers — never
- * the keys. Each provider's rating is returned separately and un-blended
- * (see README's data-strategy notes for why).
+ * calls Google on its behalf and returns just the numbers — never the key.
+ *
+ * Was originally Yelp + Google shown separately (never blended). Simplified
+ * to Google-only per a product decision: Google had broader/more reliable
+ * NYC coverage in practice, and running two providers doubled the API calls
+ * and Worker complexity for a feature that only needs one solid number.
  *
  * Deploy: `wrangler deploy` from this directory. Secrets (set once, persist
- * across deploys): YELP_API_KEY, GOOGLE_PLACES_API_KEY, ALLOWED_ORIGIN,
- * APP_TOKEN. Also requires the RATINGS_RATE_LIMIT KV binding (see
- * wrangler.toml).
+ * across deploys): GOOGLE_PLACES_API_KEY, ALLOWED_ORIGIN, APP_TOKEN. Also
+ * requires the RATINGS_RATE_LIMIT KV binding (see wrangler.toml).
+ * YELP_API_KEY is no longer read but is harmless to leave set if present.
  *
  * Responses are marked no-store — Cloudflare's edge will otherwise cache a
  * GET response per exact query string indefinitely, which silently served
@@ -30,15 +33,25 @@
 const RATE_LIMIT_MAX = 30; // requests per window, per IP
 const RATE_LIMIT_WINDOW_SECONDS = 60; // KV's minimum TTL
 
+// Local dev servers (python -m http.server, etc.) plus whatever ALLOWED_ORIGIN
+// is set to in production. Reflects the request's Origin back only if it's in
+// this set -- an unrecognized Origin still gets the production origin in the
+// CORS header, which the browser will correctly refuse to accept.
+const DEV_ORIGINS = ["http://localhost:8000", "http://127.0.0.1:8000"];
+
 export default {
   async fetch(request, env) {
-    const allowedOrigin = env.ALLOWED_ORIGIN || "https://josephvellutini-arch.github.io";
+    const productionOrigin = env.ALLOWED_ORIGIN || "https://josephvellutini-arch.github.io";
+    const requestOrigin = request.headers.get("Origin");
+    const allowedOrigin =
+      requestOrigin && DEV_ORIGINS.includes(requestOrigin) ? requestOrigin : productionOrigin;
 
     const corsHeaders = {
       "Access-Control-Allow-Origin": allowedOrigin,
       "Access-Control-Allow-Methods": "GET, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, X-App-Token",
       "Cache-Control": "no-store",
+      Vary: "Origin",
     };
 
     if (request.method === "OPTIONS") {
@@ -58,18 +71,14 @@ export default {
     const url = new URL(request.url);
     const name = url.searchParams.get("name");
     const address = url.searchParams.get("address") || "";
-    const borough = url.searchParams.get("borough") || "";
 
     if (!name) {
       return jsonResponse({ error: "Missing 'name' query param" }, 400, corsHeaders);
     }
 
-    const [yelp, google] = await Promise.all([
-      fetchYelp(name, borough, env.YELP_API_KEY),
-      fetchGoogle(name, address, env.GOOGLE_PLACES_API_KEY),
-    ]);
+    const google = await fetchGoogle(name, address, env.GOOGLE_PLACES_API_KEY);
 
-    return jsonResponse({ yelp, google }, 200, corsHeaders);
+    return jsonResponse({ google }, 200, corsHeaders);
   },
 };
 
@@ -86,32 +95,6 @@ async function checkRateLimit(env, ip) {
     expirationTtl: RATE_LIMIT_WINDOW_SECONDS,
   });
   return true;
-}
-
-const YELP_LOCATION = {
-  Manhattan: "New York, NY",
-  Brooklyn: "Brooklyn, NY",
-  Queens: "Queens, NY",
-  Bronx: "Bronx, NY",
-  StatenIsland: "Staten Island, NY",
-};
-
-async function fetchYelp(name, borough, apiKey) {
-  if (!apiKey) return null;
-  try {
-    const location = YELP_LOCATION[borough] || "New York, NY";
-    const params = new URLSearchParams({ term: name, location, limit: "1" });
-    const resp = await fetch(`https://api.yelp.com/v3/businesses/search?${params}`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const biz = data.businesses && data.businesses[0];
-    if (!biz) return null;
-    return { rating: biz.rating, review_count: biz.review_count, url: biz.url };
-  } catch {
-    return null;
-  }
 }
 
 async function fetchGoogle(name, address, apiKey) {
